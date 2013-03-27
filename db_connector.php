@@ -354,7 +354,7 @@ class Kpiw_Connector {
 	}
 	
 	private function _listApiMethods() {
-		$methods = get_class_methods('Api');
+		$methods = get_class_methods('Kpiw_Api');
 		$exclude = array('__construct');
 		return array_values(array_diff($methods, $exclude));
 	}
