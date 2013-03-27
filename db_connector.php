@@ -1,7 +1,7 @@
 <?php
 
 /** 
- * KPI Watchdog DB connector
+ * KPI Watchdog DB connector v1.0
  * 
  * This file creates API for read-only access to your MYSQL database. Using this
  * API connection, you can collect selected aggregated data in your KPI Watchdog
