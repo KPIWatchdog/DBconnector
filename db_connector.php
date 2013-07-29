@@ -1,7 +1,7 @@
 <?php
 
 /** 
- * KPI Watchdog DB connector v1.0
+ * KPI Watchdog DB connector v2.0
  * 
  * This file creates API for read-only access to your MYSQL database. Using this
  * API connection, you can collect selected aggregated data in your KPI Watchdog
@@ -35,13 +35,15 @@ define('KPIW_API_ALLOW_PRIVATE_IP', true);  // allow access from LAN for testing
 define('KPIW_API_REQUIRE_HTTPS', false);	// allow access outside LAN only using HTTPS protocol (SSL must be installed on the server)
 define('KPIW_API_KEY', '');					// optional API key (use the same key in your DB Connector settings on kpiwatchdog.com)
 
-define('KPIW_IP', '54.246.101.51');			// predifined KPI Watchdog IP (do not change)
+define('KPIW_IP', '54.246.101.51');			// predefined KPI Watchdog IP (do not change)
 
 //==============================================================================
 class Kpiw_Api {
 	private $_db;
 	private $_tables;
 	private $_fields;
+	
+	const VERSION = '2.0';
 	
 	public function __construct() {
 		$this->_connectDb();
@@ -64,147 +66,184 @@ class Kpiw_Api {
 	
 	/**
 	 * GET params:
-	 * - table (required)
-	 * - field (required)
+	 * - tbl (required)
+	 * - fld (required)
 	 * - agg (required)
-	 * - freq
-	 * - date_field
+	 * - date_fld
+	 * - freq (required if date_fld set)
 	 * - start_date
 	 * - end_date
-	 * - join_table
-	 * - join_field
-	 * - cat_field
-	 * - join_field_fk
+	 * - cond[n][tbl]
+	 * - cond[n][fld]
+	 * - cond[n][cmp]
+	 * - cond[n][val]
+	 * - seg_fld
+	 * - seg_tbl
+	 * - join[n][tbl1]
+	 * - join[n][fld1]
+	 * - join[n][tbl2]
+	 * - join[n][fld2]
 	 */
 	public function getData() {
-		$required = array('table', 'field', 'agg');
+		$required = array('tbl', 'fld', 'agg');
 		foreach ($required as $r) if (!isset($_GET[$r])) {
 			return array('error' => 'Missing required parameter: ' . $r);
 		}
 		
 		// sanitize GET parameters
-		$table = $_GET['table'];
-		if (!$this->_checkTable($table)) {
-			return array('error' => 'Unknown table: ' . $table);
+		if (!$this->_checkTable($_GET['tbl'])) {
+			return array('error' => 'Unknown table: ' . $_GET['tbl']);
 		}
 		
-		$field = $_GET['field'];
-		if (!$this->_checkField($field, $table)) {
-			return array('error' => 'Unknown field: ' . $field . ' in table ' . $table);
+		if (!$this->_checkField($_GET['fld'], $_GET['tbl'])) {
+			return array('error' => 'Unknown field: ' . $_GET['fld'] . ' in table ' . $_GET['tbl']);
 		}
-		$field = $table . '.' . $field;
+		
+		$tables = array($_GET['tbl']);
+		$metricTable = $_GET['tbl'];
+		$metricField = $metricTable . '.' . $_GET['fld'];
 		
 		$agg = strtolower($_GET['agg']);
 		if (!$this->_checkAgg($agg)) {
 			return array('error' => 'Unknown aggregation method: ' . $agg);
 		}
-		$agg = ($agg == 'count-distinct') ? "COUNT(DISTINCT $field)" : (strtoupper($agg) . "($field)");
+		$agg = ($agg == 'count-distinct') ? "COUNT(DISTINCT $metricField)" : (strtoupper($agg) . "($metricField)");
 		
-		if (isset($_GET['join_table']) && isset($_GET['join_field']) && isset($_GET['cat_field'])) {
-			// sanitize GET parameters
-			$joinTable = $_GET['join_table'];
-			if (!$this->_checkTable($joinTable)) {
-				return array('error' => 'Unknown table: ' . $joinTable);
+		$where = array(1);
+		$bind = array();
+		$dateField = '\'' . date('Y-m-d') . '\'';
+		if (isset($_GET['date_fld'])) {
+			if (!$this->_checkTable($_GET['date_tbl'])) {
+				return array('error' => 'Unknown table: ' . $_GET['date_tbl']);
 			}
-
-			$joinField = $_GET['join_field'];
-			if (!$this->_checkField($joinField, $joinTable)) {
-				return array('error' => 'Unknown field: ' . $joinField . ' in table ' . $joinTable);
-			}
-			$joinField = $joinTable . '.' . $joinField;
-
-			$joinFieldFk = isset($_GET['join_field_fk']) ? $_GET['join_field_fk'] : $_GET['join_field'];
-			if (!$this->_checkField($joinFieldFk, $table)) {
-				return array('error' => 'Unknown field: ' . $joinFieldFk . ' in table ' . $table);
-			}
-			$joinFieldFk = $table . '.' . $joinFieldFk;
-
-			$catField = $_GET['cat_field'];
-			if (!$this->_checkField($catField, $joinTable)) {
-				return array('error' => 'Unknown field: ' . $catField . ' in table ' . $joinTable);
-			}
-			$catField = $joinTable . '.' . $catField;
-		}
-
-		// STATS WITH DATE FIELD
-		$data = array();
-		if (isset($_GET['date_field'])) {
-			$dateField = $_GET['date_field'];
-			if (!$this->_checkField($dateField, $table)) {
-				return array('error' => 'Unknown field: ' . $dateField . ' in table ' . $table);
-			}
-			$dateField = $table . '.' . $dateField;
 			
+			if (!$this->_checkField($_GET['date_fld'], $_GET['date_tbl'])) {
+				return array('error' => 'Unknown field: ' . $_GET['date_fld'] . ' in table ' . $_GET['date_tbl']);
+			}
+			
+			$tables[] = $_GET['date_tbl'];
+			$dateField = $_GET['date_tbl'] . '.' . $_GET['date_fld'];
 			switch ($_GET['freq']) {
-				case 'w':
-					$dateField = 'DATE(' . $dateField . ' - INTERVAL (DAYOFWEEK(' . $dateField . ') - 2) DAY)'; break;
-				case 'm':
-					$dateField = 'DATE_FORMAT(' . $dateField . ', "%Y-%m-01")'; break;
-				case 'd':
-					$dateField = 'DATE(' . $dateField . ')'; break;
-				default:
-					return array('error' => 'Unknown frequency: ' . $_GET['freq']);	
+				case 'd': $dateField = 'DATE(' . $dateField . ')'; break;
+				case 'w': $dateField = 'DATE(' . $dateField . ' - INTERVAL (DAYOFWEEK(' . $dateField . ') - 2) DAY)'; break;
+				case 'm': $dateField = 'DATE_FORMAT(' . $dateField . ', "%Y-%m-01")'; break;
+				default: return array('error' => 'Unknown frequency: ' . $_GET['freq']);	
 			}
 
-			$query = "
-				SELECT $dateField, $agg
-				FROM $table
-				WHERE $dateField >= :start AND $dateField <= :end
-				GROUP BY $dateField";
-			$stmt = $this->_db->prepare($query);
-			$stmt->execute(array('start' => $_GET['start_date'], 'end' => $_GET['end_date']));
-			$rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-			foreach ($rows as $date => $val) {
-				$data[$date]['_total']['val'] = $val;
-			}
-
-			// segments
-			if (isset($_GET['join_table']) && isset($_GET['join_field']) && isset($_GET['cat_field'])) {
-				$query = "
-					SELECT $dateField AS dat, $agg AS val, $catField AS cat
-					FROM $table
-					INNER JOIN $joinTable ON $joinField = $joinFieldFk
-					WHERE $dateField >= :start AND $dateField <= :end
-					GROUP BY $dateField, $catField";
-				$stmt = $this->_db->prepare($query);
-				$stmt->execute(array('start' => $_GET['start_date'], 'end' => $_GET['end_date']));
-				$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-				foreach ($rows as $row) {
-					$data[$row['dat']][$row['cat']]['val'] = $row['val'];
+			$where[] = "$dateField >= :start AND $dateField <= :end";
+			$bind['start'] = $_GET['start_date'];
+			$bind['end'] = $_GET['end_date'];
+		}
+		
+		if (isset($_GET['cond'])) {
+			$cond = is_array($_GET['cond']) ? $_GET['cond'] : array($_GET['cond']);
+			foreach ($cond as $c) {
+				if (!$this->_checkTable($c['tbl'])) {
+					return array('error' => 'Unknown table: ' . $c['tbl']);
 				}
-			}
-
-		// STATS WITHOUT DATE FIELD
-		} else {
-			if (isset($_GET['start_date']) || isset($_GET['end_date'])) {
-				return array('error' => 'Date field not specified.');
-			}
-
-			$query = "
-				SELECT $agg
-				FROM $table";
-			$stmt = $this->_db->prepare($query);
-			$stmt->execute();
-			$row = $stmt->fetch(PDO::FETCH_NUM);
-
-			$date = date('Y-m-d', strtotime('yesterday'));
-			$data[$date]['_total']['val'] = $row[0];
-
-			if (isset($_GET['join_table']) && isset($_GET['join_field']) && isset($_GET['cat_field'])) {
-				$query = "
-					SELECT $catField AS cat, $agg AS val
-					FROM $table
-					INNER JOIN $joinTable ON $joinField = $joinFieldFk
-					GROUP BY $catField";
-				$stmt = $this->_db->prepare($query);
-				$stmt->execute();
-				$rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-				foreach ($rows as $cat => $val) {
-					$data[$date][$cat]['val'] = $val;
+				
+				if (!$this->_checkField($c['fld'], $c['tbl'])) {
+					return array('error' => 'Unknown field: ' . $c['fld'] . ' in table ' . $c['tbl']);
 				}
+				
+				if (!$this->_checkOperator($c['cmp'])) {
+					return array('error' => 'Unknown operator in filter: ' . $c['cmp']);
+				}
+				
+				$tables[] = $c['tbl'];
+				$where[] = $c['tbl'] . '.' . $c['fld'] . ' ' . $c['cmp'] . $this->_db->quote($c['val']);
+			}
+		}
+		$tables = array_unique($tables);
+		$where = implode(' AND ', $where);
+		
+		$segTables = $tables;
+		if (isset($_GET['seg_fld'])) {
+			if (!$this->_checkTable($_GET['seg_tbl'])) {
+				return array('error' => 'Unknown table: ' . $_GET['seg_tbl']);
+			}
+			
+			if (!$this->_checkField($_GET['seg_fld'], $_GET['seg_tbl'])) {
+				return array('error' => 'Unknown field: ' . $_GET['seg_fld'] . ' in table ' . $_GET['seg_tbl']);
+			}
+			
+			$segTables[] = $_GET['seg_tbl'];
+			$segTables = array_unique($segTables);
+			$segField = $_GET['seg_tbl'] . '.' . $_GET['seg_fld'];
+		}
+		
+		if (count($segTables) > 1) {
+			$joinTables = $connections = array();
+			if (isset($_GET['join'])) foreach ($_GET['join'] as $j) {
+				if (!$this->_checkTable($j['tbl1'])) {
+					return array('error' => 'Unknown table: ' . $j['tbl1']);
+				}
+
+				if (!$this->_checkField($j['fld1'], $j['tbl1'])) {
+					return array('error' => 'Unknown field: ' . $j['fld1'] . ' in table ' . $j['tbl1']);
+				}
+
+				if (!$this->_checkTable($j['tbl2'])) {
+					return array('error' => 'Unknown table: ' . $j['tbl2']);
+				}
+
+				if (!$this->_checkField($j['fld2'], $j['tbl2'])) {
+					return array('error' => 'Unknown field: ' . $j['fld2'] . ' in table ' . $j['tbl2']);
+				}
+				
+				$joinTables[] = $j['tbl1'];
+				$joinTables[] = $j['tbl2'];
+				$connections[$j['tbl1']][$j['tbl2']] = $connections[$j['tbl2']][$j['tbl1']] = $j['tbl1'] . '.' . $j['fld1'] . ' = ' . $j['tbl2'] . '.' . $j['fld2'];
+			}
+			
+			$diff = array_diff($segTables, $joinTables);
+			if (count($diff) > 0) {
+				return array('error' => 'Missing joins for table(s): ' . implode(', ', $diff));
+			}
+		}
+		
+		// get data without segments
+		try {
+			$join = $this->_getJoin($metricTable, $tables, $connections);
+		} catch (Exception $e) {
+			return array('error' => $e->getMessage());
+		}
+		
+		$data = array();
+		$query = "
+			SELECT $dateField, $agg
+			FROM $metricTable
+			$join
+			WHERE $where
+			GROUP BY $dateField";
+		$stmt = $this->_db->prepare($query);
+		$stmt->execute($bind);
+		$rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+		foreach ($rows as $date => $val) {
+			$data[$date]['_total']['val'] = $val;
+		}
+		
+		// get data with segments
+		if (isset($_GET['seg_fld'])) {
+			try {
+				$join = $this->_getJoin($metricTable, $segTables, $connections);
+			} catch (Exception $e) {
+				return array('error' => $e->getMessage());
+			}
+			
+			$query = "
+				SELECT $dateField AS dat, $agg AS val, $segField AS seg
+				FROM $metricTable
+				$join
+				WHERE $where
+				GROUP BY $dateField, $segField";
+			$stmt = $this->_db->prepare($query);
+			$stmt->execute($bind);
+			$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+			foreach ($rows as $row) {
+				$data[$row['dat']][$row['seg']]['val'] = $row['val'];
 			}
 		}
 		
@@ -221,7 +260,10 @@ class Kpiw_Api {
 		}
 		
 		$dsn = KPIW_DB_TYPE . ':' . 'host=' . KPIW_DB_HOST . ';dbname=' . KPIW_DB_NAME;
-		$this->_db = new PDO($dsn, KPIW_DB_USERNAME, KPIW_DB_PASSWORD, array(PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES ' . KPIW_DB_CHARSET));
+		$this->_db = new PDO($dsn, KPIW_DB_USERNAME, KPIW_DB_PASSWORD, array(
+			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+			PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES ' . KPIW_DB_CHARSET
+		));
 	}
 	
 	private function _listTables() {
@@ -253,6 +295,52 @@ class Kpiw_Api {
 	private function _checkAgg($agg) {
 		return in_array($agg, array('count', 'count-distinct', 'sum'));
 	}
+	
+	private function _checkOperator($op) {
+		return in_array($op, array('=', '>', '>=', '>', '>=', '!=', 'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL'));
+	}
+	
+	private function _getJoin($fromTable, $tables, $connections) {
+		if (count($tables) < 2 || empty($connections)) {
+			return '';
+		}
+		
+		$queue = array($fromTable);
+		$visited = array($fromTable);
+		$prev = array();
+		while (!empty($queue)) {
+			$t = array_shift($queue);
+			foreach ($connections[$t] as $tNext => $con) {
+				if (!in_array($tNext, $visited)) {
+					$prev[$tNext] = $t;
+					$queue[] = $visited[] = $tNext;
+				}
+			}
+		}
+		
+		$tables = array_diff($tables, array($fromTable));
+		$joinTables = array();
+		foreach ($tables as $t) {
+			$dist = 0;
+			while ($t != $fromTable) {
+				$joinTables[$t] = max($dist, $joinTables[$t]);
+				
+				if (!isset($prev[$t])) {
+					throw new Exception('Missing join for table: ' . $t);
+				}
+				
+				$t = $prev[$t];
+				$dist++;
+			}
+		}
+		arsort($joinTables);
+		
+		$join = '';
+		foreach ($joinTables as $t => $dist) {
+			$join .= 'JOIN ' . $t . ' ON ' . $connections[$t][$prev[$t]] . ' ';
+		}
+		return $join;
+	}
 }
 
 class Kpiw_Connector {
@@ -270,6 +358,11 @@ class Kpiw_Connector {
 		$method = $_GET['method'];
 		if ($method == 'listMethods') {
 			$data = $this->_listApiMethods();
+			$this->_outputAndExit($data);
+		}
+		
+		if ($method == 'getVersion') {
+			$data = array('version' => Kpiw_Api::VERSION);
 			$this->_outputAndExit($data);
 		}
 		
