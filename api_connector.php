@@ -8,6 +8,8 @@ define('KPIW_API_ALLOW_PRIVATE_IP', true);  // allow access from LAN for testing
 define('KPIW_API_REQUIRE_HTTPS', false);	// allow access outside LAN only using HTTPS protocol (SSL must be installed on the server)
 define('KPIW_API_KEY', '');					// optional API key (use the same key in your DB Connector settings on kpiwatchdog.com)
 
+define('KPIW_IP', '54.246.101.51');			// predefined KPI Watchdog IP (do not change)
+
 /**
  * CONFIG - DB (required only if you want to implement API methods reading data from database)
  */

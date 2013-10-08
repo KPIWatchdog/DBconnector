@@ -22,6 +22,7 @@
  */
 define('KPIW_DB_TYPE', 'mysql');
 define('KPIW_DB_HOST', '');
+define('KPIW_DB_PORT', 3306);
 define('KPIW_DB_NAME', '');
 define('KPIW_DB_USERNAME', '');
 define('KPIW_DB_PASSWORD', '');
@@ -259,7 +260,7 @@ class Kpiw_Api {
 			throw new Exception('PDO extension not installed.');
 		}
 		
-		$dsn = KPIW_DB_TYPE . ':' . 'host=' . KPIW_DB_HOST . ';dbname=' . KPIW_DB_NAME;
+		$dsn = KPIW_DB_TYPE . ':host=' . KPIW_DB_HOST . ';port=' . KPIW_DB_PORT . ';dbname=' . KPIW_DB_NAME;
 		$this->_db = new PDO($dsn, KPIW_DB_USERNAME, KPIW_DB_PASSWORD, array(
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 			PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES ' . KPIW_DB_CHARSET
