@@ -1,7 +1,7 @@
 <?php
 
 /** 
- * KPI Watchdog DB connector v2.0
+ * KPI Watchdog DB connector v3.0
  * 
  * This file creates API for read-only access to your MYSQL database. Using this
  * API connection, you can collect selected aggregated data in your KPI Watchdog
@@ -426,7 +426,7 @@ class Kpiw_Connector {
 			return false;
 		}
 		
-		if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_USER'] != KPIW_API_KEY) {
+		if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_PW'] != KPIW_API_KEY) {
 			return false;
 		}
 		
