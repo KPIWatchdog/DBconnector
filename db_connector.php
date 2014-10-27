@@ -44,8 +44,6 @@ class Kpiw_Api {
 	private $_tables;
 	private $_fields;
 	
-	const VERSION = '2.0';
-	
 	public function __construct() {
 		$this->_connectDb();
 	}
@@ -210,7 +208,7 @@ class Kpiw_Api {
 			return array('error' => $e->getMessage());
 		}
 		
-		$data = array();
+		$data = $this->_getInitData($_GET['start_date'], $_GET['end_date']);
 		$query = "
 			SELECT $dateField, $agg
 			FROM $metricTable
@@ -301,6 +299,25 @@ class Kpiw_Api {
 		return in_array($op, array('=', '>', '>=', '>', '>=', '!=', 'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL'));
 	}
 	
+	private function _getInitData($start, $end) {
+		$data = array();
+		$startTime = strtotime($start);
+        $endTime = strtotime($end);
+		
+        if ($startTime > 0 && $endTime > 0 && $startTime <= $endTime) {
+			$startMonth = date('n', $startTime);
+			$startDay = date('j', $startTime);
+			$startYear = date('Y', $startTime);
+			
+            do {
+				$data[date('Y-m-d', $startTime)]['_total']['val'] = 0;
+                $startTime = mktime(0, 0, 0, $startMonth, ++$startDay, $startYear);
+            } while ($startTime <= $endTime);
+		}
+		
+        return $data;
+    }
+	
 	private function _getJoin($fromTable, $tables, $connections) {
 		if (count($tables) < 2 || empty($connections)) {
 			return '';
@@ -345,6 +362,8 @@ class Kpiw_Api {
 }
 
 class Kpiw_Connector {
+	const VERSION = '3.0';
+	
 	public function __construct() {
 		if (!$this->_checkRequestMethod()) {
 			header("HTTP/1.1 501 Not Implemented");
@@ -363,7 +382,7 @@ class Kpiw_Connector {
 		}
 		
 		if ($method == 'getVersion') {
-			$data = array('version' => Kpiw_Api::VERSION);
+			$data = array('version' => self::VERSION);
 			$this->_outputAndExit($data);
 		}
 		

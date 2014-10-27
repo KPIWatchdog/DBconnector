@@ -157,6 +157,8 @@ class Kpiw_Api {
  * Connector class - not nessecery to modify
  */
 class Kpiw_Connector {
+	const VERSION = '3.0';
+	
 	public function __construct() {
 		if (!$this->_checkRequestMethod()) {
 			header("HTTP/1.1 501 Not Implemented");
@@ -171,6 +173,11 @@ class Kpiw_Connector {
 		$method = $_GET['method'];
 		if ($method == 'listMethods') {
 			$data = $this->_listApiMethods();
+			$this->_outputAndExit($data);
+		}
+		
+		if ($method == 'getVersion') {
+			$data = array('version' => self::VERSION);
 			$this->_outputAndExit($data);
 		}
 		
@@ -214,7 +221,7 @@ class Kpiw_Connector {
 			return false;
 		}
 		
-		if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_USER'] != KPIW_API_KEY) {
+		if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_PW'] != KPIW_API_KEY) {
 			return false;
 		}
 		
