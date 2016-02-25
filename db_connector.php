@@ -132,7 +132,12 @@ class Kpiw_Api {
 			$where[] = "$dateField >= :start AND $dateField <= :end";
 			$bind['start'] = $_GET['start_date'];
 			$bind['end'] = $_GET['end_date'];
-		}
+		} else {
+            // for weekly/monthly snapshot statistics return data only on the first day of the following period
+            if (($_GET['freq'] == 'w' && date('N') != 1) || ($_GET['freq'] == 'm' && date('j') != 1)) {
+                return array();
+            }
+        }
 		
 		if (isset($_GET['cond'])) {
 			$cond = is_array($_GET['cond']) ? $_GET['cond'] : array($_GET['cond']);
