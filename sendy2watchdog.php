@@ -157,6 +157,8 @@ class Kpiw_Api
 class Kpiw_Connector
 {
 
+    private $_error;
+
     public function __construct()
     {
         if (!$this->_checkRequestMethod()) {
@@ -166,7 +168,7 @@ class Kpiw_Connector
 
         if (!$this->_checkPermisions()) {
             header("HTTP/1.1 403 Access denied");
-            $this->_outputAndExit(array('error' => 'Access denied.'));
+            $this->_outputAndExit(array('error' => 'Access denied. ' . $this->_error));
         }
 
         $method = $_GET['method'];
@@ -210,14 +212,17 @@ class Kpiw_Connector
         }
 
         if (!$this->_isAllowedIp($_SERVER['REMOTE_ADDR'])) {
+            $this->_error = 'IP not allowed: ' . $_SERVER['REMOTE_ADDR'] . '.';
             return false;
         }
 
         if (KPIW_API_REQUIRE_HTTPS && $_SERVER['HTTPS'] != 'on') {
+            $this->_error = 'HTTPS required.';
             return false;
         }
 
         if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_USER'] != KPIW_API_KEY) {
+            $this->_error = 'API key mismatch.';
             return false;
         }
 
