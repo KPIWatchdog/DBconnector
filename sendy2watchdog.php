@@ -41,7 +41,9 @@ class Kpiw_Api {
         $stmt->execute($bind);
         $campaign = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $data = array();
+        if (empty($campaign)) {
+            return array();
+        }
 
         $segments = array(
             '_total' => array('val' => 0),
@@ -115,7 +117,9 @@ class Kpiw_Api {
 
         // $defaultTimezone = '';
         // date_default_timezone_set($campaign['timezone'] ? : $defaultTimezone);
-        $data[date('Y-m-d', $campaign['sent'])] = $segments;
+        $data = array(
+            date('Y-m-d', $campaign['sent']) => $segments
+        );
 
         return $data;
     }
@@ -153,7 +157,7 @@ class Kpiw_Api {
  */
 class Kpiw_Connector {
 
-    const VERSION = '3.0.2';
+    const VERSION = '3.0.3';
 
     private $_error;
 
