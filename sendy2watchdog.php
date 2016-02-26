@@ -16,12 +16,11 @@ require_once('includes/helpers/short.php');
 /**
  * Api class <- implement API methods here
  */
-class Kpiw_Api
-{
+class Kpiw_Api {
+
     public $_db;
-    
-    public function getData()
-    {
+
+    public function getData() {
         $this->_checkRequiredFields(array('list_id'));
         $listId = short($_GET['list_id'], true);
         if (!$listId) {
@@ -71,7 +70,7 @@ class Kpiw_Api
 
             $segments['Opened']['val'] = (int) $s0->fetchColumn();
         }
-        
+
         // CLICKED
         // get_click_percentage();
         $q1 = 'SELECT * FROM links WHERE campaign_id = ?';
@@ -122,8 +121,7 @@ class Kpiw_Api
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    private function _connectDb()
-    {
+    private function _connectDb() {
         if (!extension_loaded('pdo_mysql')) {
             throw new Exception('PDO extension not installed.');
         }
@@ -138,8 +136,7 @@ class Kpiw_Api
         $this->_db = new PDO($dsn, $dbUser, $dbPass, array(PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8'));
     }
 
-    private function _checkRequiredFields($required)
-    {
+    private function _checkRequiredFields($required) {
         foreach ($required as $r) {
             if (!isset($_GET[$r])) {
                 throw new Exception('Missing field: ' . $r);
@@ -154,20 +151,20 @@ class Kpiw_Api
 /**
  * Connector class - not nessecery to modify
  */
-class Kpiw_Connector
-{
+class Kpiw_Connector {
+
+    const VERSION = '3.0.2';
 
     private $_error;
 
-    public function __construct()
-    {
+    public function __construct() {
         if (!$this->_checkRequestMethod()) {
-            header("HTTP/1.1 501 Not Implemented");
+            header('HTTP/1.1 501 Not Implemented');
             $this->_outputAndExit(array('error' => 'Unsupported request method: ' . $_SERVER['REQUEST_METHOD']));
         }
 
         if (!$this->_checkPermisions()) {
-            header("HTTP/1.1 403 Access denied");
+            header('HTTP/1.1 403 Access denied');
             $this->_outputAndExit(array('error' => 'Access denied. ' . $this->_error));
         }
 
@@ -177,8 +174,13 @@ class Kpiw_Connector
             $this->_outputAndExit($data);
         }
 
+        if ($method == 'getVersion') {
+            $data = array('version' => self::VERSION);
+            $this->_outputAndExit($data);
+        }
+
         if (!$this->_checkApiMethod($method)) {
-            header("HTTP/1.1 400 Bad Request");
+            header('HTTP/1.1 400 Bad Request');
             $this->_outputAndExit(array('error' => 'Unknown method: ' . (!strlen($method) ? 'null' : $method)));
         }
 
@@ -186,23 +188,21 @@ class Kpiw_Connector
             $api = new Kpiw_Api();
             $data = $api->$method();
         } catch (Exception $e) {
-            header("HTTP/1.1 500 Internal Server Error");
+            header('HTTP/1.1 500 Internal Server Error');
             $this->_outputAndExit(array('error' => $e->getMessage()));
         }
 
         if (isset($data['error'])) {
-            header("HTTP/1.1 400 Bad Request");
+            header('HTTP/1.1 400 Bad Request');
         }
         $this->_outputAndExit($data);
     }
 
-    private function _checkRequestMethod()
-    {
+    private function _checkRequestMethod() {
         return $_SERVER['REQUEST_METHOD'] == 'GET';
     }
 
-    private function _checkPermisions()
-    {
+    private function _checkPermisions() {
         if (KPIW_API_ALLOW_LOOPBACK_IP && $this->_isLoopbackIp($_SERVER['REMOTE_ADDR'])) {
             return true;
         }
@@ -221,7 +221,7 @@ class Kpiw_Connector
             return false;
         }
 
-        if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_USER'] != KPIW_API_KEY) {
+        if (strlen(KPIW_API_KEY) > 0 && $_SERVER['PHP_AUTH_PW'] != KPIW_API_KEY) {
             $this->_error = 'API key mismatch.';
             return false;
         }
@@ -229,8 +229,7 @@ class Kpiw_Connector
         return true;
     }
 
-    private function _isLoopbackIp($ip)
-    {
+    private function _isLoopbackIp($ip) {
         if (strpos($ip, '127.0.0.') === 0) {
             return true;
         }
@@ -238,8 +237,7 @@ class Kpiw_Connector
         return false;
     }
 
-    private function _isPrivateIp($ip)
-    {
+    private function _isPrivateIp($ip) {
         $ipArr = explode('.', $ip);
         if ($ipArr[0] == 10) {
             return true;
@@ -256,25 +254,21 @@ class Kpiw_Connector
         return false;
     }
 
-    private function _isAllowedIp($ip)
-    {
+    private function _isAllowedIp($ip) {
         return $ip == KPIW_IP;
     }
 
-    private function _checkApiMethod($method)
-    {
+    private function _checkApiMethod($method) {
         return in_array($method, $this->_listApiMethods());
     }
 
-    private function _listApiMethods()
-    {
+    private function _listApiMethods() {
         $methods = get_class_methods('Kpiw_Api');
         $exclude = array('__construct');
         return array_values(array_diff($methods, $exclude));
     }
 
-    private function _outputAndExit($data)
-    {
+    private function _outputAndExit($data) {
         header('Content-type: application/json; charset=UTF-8');
         echo json_encode($data);
         exit;
@@ -283,4 +277,3 @@ class Kpiw_Connector
 }
 
 new Kpiw_Connector();
-
